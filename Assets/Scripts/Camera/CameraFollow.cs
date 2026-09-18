@@ -1,6 +1,5 @@
 using System.Collections;
 using UnityEngine;
-using Fusion;
 
 [RequireComponent(typeof(Camera))]
 public class CameraFollow : MonoBehaviour
@@ -9,11 +8,14 @@ public class CameraFollow : MonoBehaviour
 
     [Header("Top-Down Perspective Settings")]
     [SerializeField] private float cameraHeight = 18f;
-    [SerializeField, Range(60f, 90f)] private float topDownPitchAngle = 80f;
-    [SerializeField] private float smoothSpeed = 10f;
+    [SerializeField, Range(45f, 90f)] private float topDownPitchAngle = 80f;
+    [SerializeField] private float smoothSpeed = 15f;
 
     [Header("Viewport Positioning")]
+    [Tooltip("Target normalized vertical screen position for the runner (0.25 = quarter screen from bottom)")]
     [SerializeField, Range(0.1f, 0.5f)] private float screenHeightRatio = 0.25f;
+
+    [Tooltip("Lock camera strictly down the center line of the track (X = 0)")]
     [SerializeField] private bool lockLateralCenter = true;
 
     private Vector3 shakeOffset = Vector3.zero;
@@ -36,25 +38,25 @@ public class CameraFollow : MonoBehaviour
     {
         if (target == null)
         {
-            FindLocalPlayer();
+            var player = FindObjectOfType<SinglePlayerController>();
+            if (player != null) target = player.transform;
             return;
         }
 
-        float forwardLeadOffset = CalculateForwardLeadOffset();
+        float cameraToPlayerGroundZ = CalculateCameraToPlayerGroundDistance();
+
         float targetX = lockLateralCenter ? 0f : target.position.x;
         float targetY = cameraHeight;
-        float targetZ = target.position.z + forwardLeadOffset;
+        float targetZ = target.position.z - cameraToPlayerGroundZ;
 
-        Vector3 desiredPosition = new Vector3(targetX, targetY, targetZ);
-        transform.position = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed * Time.deltaTime) + shakeOffset;
+        Vector3 desiredPos = new Vector3(targetX, targetY, targetZ);
+        transform.position = Vector3.Lerp(transform.position, desiredPos, smoothSpeed * Time.deltaTime) + shakeOffset;
+        transform.rotation = Quaternion.Euler(topDownPitchAngle, 0f, 0f);
     }
 
     public void TriggerShake(float duration = 0.25f, float magnitude = 0.4f)
     {
-        if (shakeCoroutine != null)
-        {
-            StopCoroutine(shakeCoroutine);
-        }
+        if (shakeCoroutine != null) StopCoroutine(shakeCoroutine);
         shakeCoroutine = StartCoroutine(ExecuteShake(duration, magnitude));
     }
 
@@ -63,13 +65,12 @@ public class CameraFollow : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < duration)
         {
-            float currentMagnitude = Mathf.Lerp(magnitude, 0f, elapsed / duration);
+            float currentMag = Mathf.Lerp(magnitude, 0f, elapsed / duration);
             shakeOffset = new Vector3(
-                UnityEngine.Random.Range(-1f, 1f) * currentMagnitude,
+                Random.Range(-1f, 1f) * currentMag,
                 0f,
-                UnityEngine.Random.Range(-1f, 1f) * currentMagnitude
+                Random.Range(-1f, 1f) * currentMag
             );
-
             elapsed += Time.deltaTime;
             yield return null;
         }
@@ -78,33 +79,22 @@ public class CameraFollow : MonoBehaviour
         shakeCoroutine = null;
     }
 
-    private float CalculateForwardLeadOffset()
+    private float CalculateCameraToPlayerGroundDistance()
     {
-        float totalFrustumHeight;
+        if (cam == null) cam = GetComponent<Camera>();
+
         if (cam.orthographic)
         {
-            totalFrustumHeight = 2f * cam.orthographicSize;
-        }
-        else
-        {
-            float distanceToGround = cameraHeight;
-            totalFrustumHeight = 2f * distanceToGround * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float frustumHeight = 2f * cam.orthographicSize;
+            return frustumHeight * (screenHeightRatio - 0.5f);
         }
 
-        float viewportOffsetFromCenter = 0.5f - screenHeightRatio;
-        return totalFrustumHeight * viewportOffsetFromCenter;
-    }
+        float verticalAngleFromCenter = (screenHeightRatio - 0.5f) * cam.fieldOfView;
+        float rayPitchFromGround = topDownPitchAngle - verticalAngleFromCenter;
 
-    private void FindLocalPlayer()
-    {
-        var players = FindObjectsOfType<RunnerPlayer>();
-        foreach (var player in players)
-        {
-            if (player.Object != null && player.Object.HasInputAuthority)
-            {
-                target = player.transform;
-                break;
-            }
-        }
+        float clampedPitch = Mathf.Clamp(rayPitchFromGround, 10f, 89f);
+        float pitchRad = clampedPitch * Mathf.Deg2Rad;
+
+        return cameraHeight / Mathf.Tan(pitchRad);
     }
 }
