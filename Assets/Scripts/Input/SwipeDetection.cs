@@ -1,17 +1,16 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class SwipeDetection : MonoBehaviour
 {
     public static event Action OnSwipeLeft;
     public static event Action OnSwipeRight;
-    public static event Action OnSwipeUp;
-    public static event Action OnSwipeDown;
 
     [Header("Swipe Thresholds")]
-    [SerializeField] private float minimumDistance = 50f;
-    [SerializeField] private float maximumTime = 1f;
-    [SerializeField, Range(0f, 1f)] private float directionThreshold = 0.7f;
+    [SerializeField] private float minimumDistance = 0.15f;
+    [SerializeField] private float maximumTime = 0.8f;
+    [SerializeField, Range(0f, 1f)] private float directionThreshold = 0.6f;
 
     private InputManager inputManager;
     private Vector2 startPosition;
@@ -19,21 +18,38 @@ public class SwipeDetection : MonoBehaviour
     private Vector2 endPosition;
     private float endTime;
 
-    private void Awake()
+    private void Start()
     {
         inputManager = InputManager.Instance;
-    }
-
-    private void OnEnable()
-    {
-        inputManager.OnStartTouch += SwipeStart;
-        inputManager.OnEndTouch += SwipeEnd;
+        if (inputManager != null)
+        {
+            inputManager.OnStartTouch += SwipeStart;
+            inputManager.OnEndTouch += SwipeEnd;
+        }
     }
 
     private void OnDisable()
     {
-        inputManager.OnStartTouch -= SwipeStart;
-        inputManager.OnEndTouch -= SwipeEnd;
+        if (inputManager != null)
+        {
+            inputManager.OnStartTouch -= SwipeStart;
+            inputManager.OnEndTouch -= SwipeEnd;
+        }
+    }
+
+    private void Update()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null) return;
+
+        if (keyboard.aKey.wasPressedThisFrame || keyboard.leftArrowKey.wasPressedThisFrame)
+        {
+            OnSwipeLeft?.Invoke();
+        }
+        else if (keyboard.dKey.wasPressedThisFrame || keyboard.rightArrowKey.wasPressedThisFrame)
+        {
+            OnSwipeRight?.Invoke();
+        }
     }
 
     private void SwipeStart(Vector2 position, float time)
@@ -58,31 +74,14 @@ public class SwipeDetection : MonoBehaviour
         if (distance >= minimumDistance && duration <= maximumTime)
         {
             Vector2 direction = delta.normalized;
-            SwipeDirection(direction);
-        }
-    }
-
-    private void SwipeDirection(Vector2 direction)
-    {
-        if (Vector2.Dot(Vector2.left, direction) > directionThreshold)
-        {
-            Debug.Log("[Swipe] Swipe Left Detected!");
-            OnSwipeLeft?.Invoke();
-        }
-        else if (Vector2.Dot(Vector2.right, direction) > directionThreshold)
-        {
-            Debug.Log("[Swipe] Swipe Right Detected!");
-            OnSwipeRight?.Invoke();
-        }
-        else if (Vector2.Dot(Vector2.up, direction) > directionThreshold)
-        {
-            Debug.Log("[Swipe] Swipe Up Detected!");
-            OnSwipeUp?.Invoke();
-        }
-        else if (Vector2.Dot(Vector2.down, direction) > directionThreshold)
-        {
-            Debug.Log("[Swipe] Swipe Down Detected!");
-            OnSwipeDown?.Invoke();
+            if (Vector2.Dot(Vector2.left, direction) > directionThreshold)
+            {
+                OnSwipeLeft?.Invoke();
+            }
+            else if (Vector2.Dot(Vector2.right, direction) > directionThreshold)
+            {
+                OnSwipeRight?.Invoke();
+            }
         }
     }
 }
